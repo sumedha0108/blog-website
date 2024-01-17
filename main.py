@@ -1,5 +1,5 @@
 from datetime import date
-from flask import Flask, abort, render_template, redirect, url_for, flash
+from flask import Flask, abort, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
@@ -9,10 +9,15 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
+import os
+from dotenv import load_dotenv
+import smtplib
+
+load_dotenv()
 
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+app.config['SECRET_KEY'] = os.getenv('FLASK_KEY')
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 gravatar = Gravatar(app,
@@ -25,6 +30,10 @@ gravatar = Gravatar(app,
                     base_url=None)
 
 login_manager = LoginManager()
+
+email = os.getenv('MY_EMAIL')
+email_pass = os.getenv('EMAIL_PASS')
+
 login_manager.init_app(app)
 
 @login_manager.user_loader
@@ -41,7 +50,7 @@ def admin_only(func):
 
 
 # CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
 db = SQLAlchemy()
 db.init_app(app)
 
@@ -210,10 +219,23 @@ def about():
     return render_template("about.html", logged_in=current_user.is_authenticated)
 
 
-@app.route("/contact")
+@app.route("/contact", methods=["GET", "POST"])
 def contact():
-    return render_template("contact.html", logged_in=current_user.is_authenticated)
+    text = 'Contact Me'
+    if request.method == "POST":
+        dataform = request.form
+        print(dataform["name"])
+        text = 'Successfully sent message'
+        send_email(dataform["name"], dataform["email"], dataform["phone"], dataform["message"])
+    return render_template("contact.html", text=text, logged_in=current_user.is_authenticated)
+
+def send_email(name, email, phone, message):
+    email_message = f"Subject:New Message\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
+    with smtplib.SMTP("smtp.gmail.com", port=587) as connection:
+        connection.starttls()
+        connection.login(email, email_pass)
+        connection.sendmail(email, email, email_message)
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5002)
+    app.run(debug=False)
